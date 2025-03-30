@@ -176,7 +176,7 @@ def visualize_model_layers(model, dataloader, num_images=1, device = torch.devic
     
     return fig
 
-def compute_confusion_matrix(model, dataloader, device=None):
+def compute_confusion_matrix(model, dataloader, device=None, class_names=None):
     """
     Compute and visualize the confusion matrix for a model on a given dataloader.
     
@@ -194,8 +194,8 @@ def compute_confusion_matrix(model, dataloader, device=None):
     # Set model to evaluation mode
     model.eval()
     
-    # Try to get class names from the dataset
-    class_names = getattr(dataloader.dataset, 'class_names', None)
+    if class_names is None:
+        class_names = getattr(dataloader.dataset, 'class_names', None)
     
     # Lists to store true labels and predictions
     all_targets = []
@@ -256,3 +256,65 @@ def compute_confusion_matrix(model, dataloader, device=None):
     plt.tight_layout()
     
     return fig
+
+def select_n_random(data, labels, n=100):
+    '''
+    Selects n random datapoints and their corresponding labels from a dataset
+    '''
+    assert len(data) == len(labels)
+
+    perm = torch.randperm(len(data))
+    return data[perm][:n], labels[perm][:n]
+
+def log_embeddings(model, dataloader, logger, class_names, device=None, n_samples=100):
+    """
+    Extract features from images and log them as embeddings to TensorBoard.
+    
+    Args:
+        model: The model from which to extract features
+        dataloader: DataLoader containing the dataset
+        logger: TensorBoard SummaryWriter instance
+        class_names: List of class names for metadata
+        device: Device to run the model on
+        n_samples: Number of samples to visualize
+    """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Get random batch
+    dataiter = iter(dataloader)
+    images, labels = next(dataiter)
+    
+    # Select random subset
+    images, labels = select_n_random(images, labels, n=n_samples)
+    
+    # Get class labels for each image
+    class_label_names = [class_names[lab] for lab in labels]
+    
+    # Set model to evaluation mode
+    model.eval()
+    
+    # Extract features (from the output of the conv layers, before the classifier)
+    with torch.no_grad():
+        # Move images to device
+        images = images.to(device)
+        
+        # Run images through model features (convolutional layers)
+        features_maps = model.features(images)
+        
+        # Global average pooling to get a 1D feature vector
+        features = torch.mean(features_maps, dim=[2, 3])  # Average over spatial dimensions
+        
+    # Move features back to CPU for logging
+    features = features.cpu()
+    
+    # Log embeddings to TensorBoard
+    logger.add_embedding(
+        features,
+        metadata=class_label_names,
+        label_img=images.cpu(),
+        global_step=0
+    )
+    
+    # Ensure embeddings are written to disk
+    logger.flush()

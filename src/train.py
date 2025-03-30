@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from dataset import CustomCIFAR
 from model import TinyVGG
-from utils import visualize_model_layers, compute_confusion_matrix
+from utils import visualize_model_layers, compute_confusion_matrix, log_embeddings
 
 from config import train_config, config_TinyVGG
 import datetime
@@ -15,17 +15,21 @@ import wandb
 def main():
     # Initialize WandB project for visualization.
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"{train_config['run_name']}_graph_{timestamp}"
+    run_name = f"{train_config['run_name']}_{timestamp}"
     run = wandb.init(project=train_config["project_name"], 
                name=run_name,
                config={**train_config, **config_TinyVGG})
     
-    # Initialize TensorBoard logger
-    logger = SummaryWriter(log_dir='logs')
+    # Initialize TensorBoard logger with run name in the log directory
+    log_dir = os.path.join('logs/', run_name)
+    logger = SummaryWriter(log_dir=log_dir)
     
     # Create directory for saving feature visualizations
-    vis_dir = os.path.join('logs', 'feature_maps')
+    vis_dir = os.path.join(log_dir, 'feature_maps')
     os.makedirs(vis_dir, exist_ok=True)
+
+    # Log the run name as text in TensorBoard
+    logger.add_text('Run Info', f'Run Name: {run_name}', 0)
 
     # Set device and hyperparameters.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -35,6 +39,7 @@ def main():
 
     # Get data loaders.
     data = CustomCIFAR(subset_size = 100)
+    class_names = data.class_names
     train_loader, val_loader = data.get_train_val_loaders(batch_size=batch_size, validation_split=0.2)
 
 
@@ -48,6 +53,8 @@ def main():
     # run.watch(model, log="all", log_graph=True, log_freq=1)
 
     # Try to add model graph to tensorboard
+    # Log embeddings to TensorBoard
+    # log_embeddings(model, train_loader, logger, class_names, device, n_samples=100)
     try:
         # Get a sample batch to trace the model
         dataiter = iter(train_loader)
@@ -110,11 +117,13 @@ def main():
         feature_fig = visualize_model_layers(model, val_loader)
         
         # Compute and visualize confusion matrix - now simpler to call
-        conf_matrix_fig = compute_confusion_matrix(model, val_loader, device)
+        conf_matrix_fig = compute_confusion_matrix(model, val_loader, device, class_names=class_names)
         
         # Log figures to TensorBoard
         logger.add_figure(tag='Feature Maps/Epoch', figure=feature_fig, global_step=epoch)
         logger.add_figure(tag='Confusion Matrix/Epoch', figure=conf_matrix_fig, global_step=epoch)
+        
+            
         
         # Log figures to WandB
         # run.log({
@@ -122,7 +131,7 @@ def main():
         #     "Confusion Matrix/Epoch": conf_matrix_fig
         # })
 
-        model.train()
+        # model.train()
     
     train()
     run.finish()
