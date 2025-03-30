@@ -16,17 +16,21 @@ net = nn.Sequential(
 )
 print_network_parameters(net)
 
-# You can further add more layers to the network
+#%% You can further add more layers to the network
 net.append(nn.ReLU())
 net.append(nn.Linear(10, 10))
 print_network_parameters(net)
 
-# You can even use for loop to add layers
+#%% You can even use for loop to add layers
+net = nn.Sequential(nn.Linear(5,10))
 depth = 3
 for _ in range(depth):
     net.append(nn.ReLU())
     net.append(nn.Linear(10, 10))
 print_network_parameters(net)
+
+x = torch.randn(1, 5)
+print(net(x))
 
 #%% Define a one-hidden-layer network
 class TwoLayerNet(nn.Module):
@@ -44,6 +48,7 @@ class TwoLayerNet(nn.Module):
 # Initialize the model
 input_size, hidden_size, output_size = 784, 256, 10
 net = TwoLayerNet(input_size, hidden_size, output_size)
+print_network_parameters(net)
 
 #%%
 # Print the model
@@ -51,6 +56,7 @@ print_network_parameters(net)
 # %%
 
 # %% Define a custom activation function
+
 class CustomTwoLayerNet(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
@@ -108,7 +114,7 @@ print_network_parameters(net)
 # %% Dropout
 import torch.nn as nn
 
-class TwoLayerNet(nn.Module):
+class TwoLayerDropoutNet(nn.Module):
     def __init__(self, D_in, H, D_out): 
         super().__init__()
         self.net = nn.Sequential(
