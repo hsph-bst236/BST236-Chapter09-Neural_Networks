@@ -12,129 +12,155 @@ import os
 from torch.utils.tensorboard import SummaryWriter
 import wandb
 
-def main():
-    # Initialize WandB project for visualization.
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"{train_config['run_name']}_{timestamp}"
-    run = wandb.init(project=train_config["project_name"], 
-               name=run_name,
-               config={**train_config, **config_TinyVGG})
+class Trainer:
+    def __init__(self, train_config, model_config):
+        # Store configs
+        self.train_config = train_config
+        self.model_config = model_config
+        
+        # Initialize timestamp and run name
+        self.timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.run_name = f"{train_config['run_name']}_{self.timestamp}"
+        
+        # Set device and extract hyperparameters
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.epochs = train_config["epochs"]
+        self.batch_size = train_config["batch_size"]
+        self.learning_rate = train_config["learning_rate"]
+        
+        
+        # Initialize logger and wandb
+        self._setup_logging()
+        
+        # Setup data, model, and optimizer
+        self._setup_data()
+        self._setup_model()
+        
+    def _setup_logging(self):
+        """Initialize WandB and TensorBoard loggers."""
+        # Initialize WandB
+        self.wandb_run = wandb.init(
+            project=self.train_config["project_name"],
+            name=self.run_name,
+            config={**self.train_config, **self.model_config}
+        )
+        
+        # Initialize TensorBoard logger
+        log_dir = os.path.join('logs/', self.run_name)
+        self.logger = SummaryWriter(log_dir=log_dir)
+        
+        
+        
+    def _setup_data(self):
+        """Load and prepare the dataset."""
+        data = CustomCIFAR(subset_size=100)
+        self.class_names = data.class_names
+        self.train_loader, self.val_loader = data.get_train_val_loaders(
+            batch_size=self.batch_size, 
+            validation_split=0.2
+        )
+        
+    def _setup_model(self):
+        """Initialize the model, loss function, and optimizer."""
+        self.model = TinyVGG(
+            input_channels=self.model_config["input_channels"],
+            num_classes=self.model_config["num_classes"]
+        ).to(self.device)
+        
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        
+        # Try to add model graph to tensorboard
+        try:
+            dataiter = iter(self.train_loader)
+            images, _ = next(dataiter)
+            images = images.to(self.device)
+            self.logger.add_graph(self.model, images)
+            print("Successfully added model graph to TensorBoard")
+        except Exception as e:
+            print(f"Failed to add model graph to TensorBoard: {e}")
+            print("Continuing training without model graph visualization")
     
-    # Initialize TensorBoard logger with run name in the log directory
-    log_dir = os.path.join('logs/', run_name)
-    logger = SummaryWriter(log_dir=log_dir)
-    
-    # Create directory for saving feature visualizations
-    vis_dir = os.path.join(log_dir, 'feature_maps')
-    os.makedirs(vis_dir, exist_ok=True)
+    def train(self):
+        """Run the training loop with evaluation."""
 
-    # Log the run name as text in TensorBoard
-    logger.add_text('Run Info', f'Run Name: {run_name}', 0)
-
-    # Set device and hyperparameters.
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    epochs = train_config["epochs"]
-    batch_size = train_config["batch_size"]
-    learning_rate = train_config["learning_rate"]
-
-    # Get data loaders.
-    data = CustomCIFAR(subset_size = 100)
-    class_names = data.class_names
-    train_loader, val_loader = data.get_train_val_loaders(batch_size=batch_size, validation_split=0.2)
-
-
-    # Instantiate model, loss function and optimizer.
-    model = TinyVGG(input_channels=config_TinyVGG["input_channels"], 
-                    num_classes=config_TinyVGG["num_classes"]).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
-    # Watch the model to track architecture, gradients, and parameters
-    # run.watch(model, log="all", log_graph=True, log_freq=1)
-
-    # Try to add model graph to tensorboard
-    # Log embeddings to TensorBoard
-    # log_embeddings(model, train_loader, logger, class_names, device, n_samples=100)
-    try:
-        # Get a sample batch to trace the model
-        dataiter = iter(train_loader)
-        images, _ = next(dataiter)
-        images = images.to(device)
-            
-        # Add graph using the actual batch data
-        logger.add_graph(model, images)
-        print("Successfully added model graph to TensorBoard")
-    except Exception as e:
-        print(f"Failed to add model graph to TensorBoard: {e}")
-        print("Continuing training without model graph visualization")
-
-
-    def train():
-        for epoch in range(epochs):
-            model.train()
+        for epoch in range(self.epochs):
+            self.model.train()
             running_loss = 0.0
-            for batch_idx, (inputs, targets) in enumerate(train_loader):
-                inputs, targets = inputs.to(device), targets.to(device)
+            
+            for batch_idx, (inputs, targets) in enumerate(self.train_loader):
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
                 
-                # Zero the parameter gradients.
-                optimizer.zero_grad()
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
+                # Zero the parameter gradients
+                self.optimizer.zero_grad()
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
                 
                 running_loss += loss.item()
 
-            avg_loss = running_loss / len(train_loader)
-            print(f"Epoch [{epoch+1}/{epochs}], Train Loss: {avg_loss:.4f}")  
-            # Log to WandB
-            run.log({"train_loss": avg_loss}) 
-            # Log to TensorBoard
-            logger.add_scalar(tag='Loss/train', scalar_value=avg_loss, global_step=epoch)
-
-            evaluate(epoch)
+            avg_loss = running_loss / len(self.train_loader)
+            print(f"Epoch [{epoch+1}/{self.epochs}], Train Loss: {avg_loss:.4f}")  
             
-            
+            # Log metrics
+            self.wandb_run.log({"train_loss": avg_loss}) 
+            self.logger.add_scalar(tag='Loss/train', scalar_value=avg_loss, global_step=epoch)
 
-    def evaluate(epoch):
-        model.eval()
+            # Evaluate after each epoch
+            self.evaluate(epoch)
+            
+    def evaluate(self, epoch):
+        """Evaluate the model and log metrics."""
+        self.model.eval()
         running_loss = 0.0
+        
         with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(val_loader):
-                inputs, targets = inputs.to(device), targets.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
+            for batch_idx, (inputs, targets) in enumerate(self.val_loader):
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
                 running_loss += loss.item()
 
-        avg_loss = running_loss / len(val_loader)
-        print(f"Epoch [{epoch+1}/{epochs}], Val Loss: {avg_loss:.4f}")   
-        # Log to WandB
-        run.log({"val_loss": avg_loss}) 
-        # Log to TensorBoard
-        logger.add_scalar(tag='Loss/val', scalar_value=avg_loss, global_step=epoch)
+        avg_loss = running_loss / len(self.val_loader)
+        print(f"Epoch [{epoch+1}/{self.epochs}], Val Loss: {avg_loss:.4f}")   
+        if epoch == self.epochs - 1:
+            self.final_val_loss = avg_loss
+            # Log hyperparameters to TensorBoard
+            hparams = {**self.train_config, **self.model_config}
+            self.logger.add_hparams(hparams, metric_dict={'final_val_loss': self.final_val_loss})
         
-        # Visualize feature maps at the end of each epoch and save to file
-        feature_fig = visualize_model_layers(model, val_loader)
+        # Log metrics
+        self.wandb_run.log({"val_loss": avg_loss}) 
+        self.logger.add_scalar(tag='Loss/val', scalar_value=avg_loss, global_step=epoch)
         
-        # Compute and visualize confusion matrix - now simpler to call
-        conf_matrix_fig = compute_confusion_matrix(model, val_loader, device, class_names=class_names)
+        # Visualize feature maps and confusion matrix
+        feature_fig = visualize_model_layers(self.model, self.val_loader)
+        conf_matrix_fig = compute_confusion_matrix(
+            self.model, 
+            self.val_loader, 
+            self.device, 
+            class_names=self.class_names
+        )
         
         # Log figures to TensorBoard
-        logger.add_figure(tag='Feature Maps/Epoch', figure=feature_fig, global_step=epoch)
-        logger.add_figure(tag='Confusion Matrix/Epoch', figure=conf_matrix_fig, global_step=epoch)
-        
-            
-        
-        # Log figures to WandB
-        # run.log({
-        #     "Feature Maps/Epoch": feature_fig,
-        #     "Confusion Matrix/Epoch": conf_matrix_fig
-        # })
-
-        # model.train()
+        self.logger.add_figure(tag='Feature Maps/Epoch', figure=feature_fig, global_step=epoch)
+        self.logger.add_figure(tag='Confusion Matrix/Epoch', figure=conf_matrix_fig, global_step=epoch)
     
-    train()
-    run.finish()
+    def cleanup(self):
+        """Close loggers and finish the run."""
+        self.wandb_run.finish()
+        self.logger.close()
+
+def main():
+    # Create trainer instance with configs
+    trainer = Trainer(train_config, config_TinyVGG)
+    
+    # Run training
+    trainer.train()
+    
+    # Clean up resources
+    trainer.cleanup()
 
 if __name__ == "__main__":
     main()

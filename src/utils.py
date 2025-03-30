@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import torchvision
 from sklearn.metrics import confusion_matrix

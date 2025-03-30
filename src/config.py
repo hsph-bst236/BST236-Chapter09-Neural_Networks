@@ -1,6 +1,6 @@
 # Configuration parameters for training
 train_config = {
-    "project_name": "pytorch-cnn-cv-tutorial",
+    "project_name": "pytorch-cnn-cv-hypertuning",
     "run_name": "cifar10-tinyvgg-run",
     "epochs": 10,
     "batch_size": 64,
