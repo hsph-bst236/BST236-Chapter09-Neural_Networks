@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 import wandb
 
 class Trainer:
-    def __init__(self, train_config, model_config):
+    def __init__(self, train_config, model_config, save_freq=None):
         # Store configs
         self.train_config = train_config
         self.model_config = model_config
@@ -28,6 +28,8 @@ class Trainer:
         self.batch_size = train_config["batch_size"]
         self.learning_rate = train_config["learning_rate"]
         
+        # Checkpoint saving frequency (None means no checkpoints)
+        self.save_freq = save_freq
         
         # Initialize logger and wandb
         self._setup_logging()
@@ -110,6 +112,24 @@ class Trainer:
             # Evaluate after each epoch
             self.evaluate(epoch)
             
+            # Save checkpoint if save_freq is specified and it's time to save
+            if self.save_freq is not None and (epoch + 1) % self.save_freq == 0:
+                self._save_checkpoint(epoch)
+                
+    def _save_checkpoint(self, epoch):
+        """Save a checkpoint of the model."""
+        os.makedirs('checkpoints', exist_ok=True)
+        checkpoint_path = f"checkpoints/{self.run_name}_epoch{epoch+1}.pth"
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+        }, checkpoint_path)
+        print(f"Saved checkpoint to {checkpoint_path}")
+        # Log checkpoint to wandb
+        self.wandb_run.log({f"checkpoint_epoch_{epoch+1}": checkpoint_path})
+
+    
     def evaluate(self, epoch):
         """Evaluate the model and log metrics."""
         self.model.eval()
