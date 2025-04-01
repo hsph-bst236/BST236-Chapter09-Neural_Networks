@@ -2,6 +2,7 @@
 train_config = {
     "project_name": "pytorch-cnn-cv-hypertuning",
     "run_name": "cifar10-tinyvgg-run",
+    "checkpoint_dir": "checkpoints",
     "epochs": 10,
     "batch_size": 64,
     "learning_rate": 1e-3,

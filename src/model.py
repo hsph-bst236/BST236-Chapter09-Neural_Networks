@@ -51,3 +51,8 @@ if __name__ == "__main__":
     x = torch.randn(1, 3, 32, 32)
     print(model(x).shape)
 # %%
+#%% 
+    # Import ResNet18
+    import torchvision.models as models
+    resnet18 = models.resnet18(pretrained=True)
+    print(resnet18)

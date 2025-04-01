@@ -21,7 +21,11 @@ class FineTuner(Trainer):
     def _load_pretrained_model(self, pretrained_model_path):
         """Load weights from a pretrained model"""
         checkpoint = torch.load(pretrained_model_path, map_location=self.device)
-        self.model.load_state_dict(checkpoint)
+        # Handle both direct state dict and dictionary format
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            self.model.load_state_dict(checkpoint)
         print(f"Loaded pretrained model from {pretrained_model_path}")
         
     def _freeze_layers(self):

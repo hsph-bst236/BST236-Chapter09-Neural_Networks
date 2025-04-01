@@ -118,8 +118,8 @@ class Trainer:
                 
     def _save_checkpoint(self, epoch):
         """Save a checkpoint of the model."""
-        os.makedirs('checkpoints', exist_ok=True)
-        checkpoint_path = f"checkpoints/{self.run_name}_epoch{epoch+1}.pth"
+        os.makedirs(self.train_config["checkpoint_dir"], exist_ok=True)
+        checkpoint_path = f"{self.train_config['checkpoint_dir']}/{self.run_name}_epoch{epoch+1}.pth"
         torch.save({
             'epoch': epoch + 1,
             'model_state_dict': self.model.state_dict(),
@@ -128,7 +128,7 @@ class Trainer:
         print(f"Saved checkpoint to {checkpoint_path}")
         # Log checkpoint to wandb
         self.wandb_run.log({f"checkpoint_epoch_{epoch+1}": checkpoint_path})
-
+      
     
     def evaluate(self, epoch):
         """Evaluate the model and log metrics."""

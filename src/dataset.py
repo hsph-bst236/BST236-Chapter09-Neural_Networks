@@ -119,6 +119,8 @@ class CustomCIFAR(Dataset):
             ax.axis('off')
         plt.show()
 
+
+
 #%%
 if __name__ == "__main__":
     # Create a small subset for quick testing.
@@ -134,3 +136,7 @@ if __name__ == "__main__":
     #%%
     class_names = custom_dataset.class_names
     print( getattr(loader.dataset, 'class_names', None))
+
+
+
+# %%
