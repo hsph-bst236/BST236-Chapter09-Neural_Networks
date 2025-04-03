@@ -19,12 +19,12 @@ class CustomCIFAR(Dataset):
                 self.transform = transforms.Compose([
                     transforms.RandomHorizontalFlip(),  # Data augmentation
                     transforms.ToTensor(),
-                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.2, 0.2, 0.2))
                 ])
             else:
                 self.transform = transforms.Compose([
                     transforms.ToTensor(),
-                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.2, 0.2, 0.2))
                 ])
         else:
             self.transform = transform

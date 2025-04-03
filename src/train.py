@@ -8,15 +8,17 @@ from utils import visualize_model_layers, compute_confusion_matrix, log_embeddin
 from config import train_config, config_TinyVGG
 import datetime
 import os
+from tqdm import tqdm
 
 from torch.utils.tensorboard import SummaryWriter
 import wandb
 
 class Trainer:
-    def __init__(self, train_config, model_config, save_freq=None):
+    def __init__(self, train_config, model_config, save_freq=None, subset_size=None):
         # Store configs
         self.train_config = train_config
         self.model_config = model_config
+        self.subset_size = subset_size
         
         # Initialize timestamp and run name
         self.timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -55,7 +57,10 @@ class Trainer:
         
     def _setup_data(self):
         """Load and prepare the dataset."""
-        data = CustomCIFAR(subset_size=100)
+        if self.subset_size is not None: # Train for smaller subset of data
+            data = CustomCIFAR(subset_size=self.subset_size)
+        else: # Train for all data
+            data = CustomCIFAR()
         self.class_names = data.class_names
         self.train_loader, self.val_loader = data.get_train_val_loaders(
             batch_size=self.batch_size, 
@@ -89,8 +94,11 @@ class Trainer:
         for epoch in range(self.epochs):
             self.model.train()
             running_loss = 0.0
-            
-            for batch_idx, (inputs, targets) in enumerate(self.train_loader):
+            correct = 0
+            total = 0
+
+            train_pbar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.epochs} [Train]")
+            for batch_idx, (inputs, targets) in enumerate(train_pbar):
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 
                 # Zero the parameter gradients
@@ -101,13 +109,29 @@ class Trainer:
                 self.optimizer.step()
                 
                 running_loss += loss.item()
+                
+                # Calculate accuracy
+                _, predicted = outputs.max(1)
+                total += targets.size(0)
+                correct += predicted.eq(targets).sum().item()
+                
+                # Update progress bar
+                train_pbar.set_postfix({
+                    'loss': f'{loss.item():.4f}',
+                    'acc': f'{100.0 * correct / total:.2f}%'
+                })
 
             avg_loss = running_loss / len(self.train_loader)
-            print(f"Epoch [{epoch+1}/{self.epochs}], Train Loss: {avg_loss:.4f}")  
+            train_accuracy = 100.0 * correct / total
+            print(f"Epoch [{epoch+1}/{self.epochs}], Train Loss: {avg_loss:.4f}, Train Accuracy: {train_accuracy:.2f}%")  
             
             # Log metrics
-            self.wandb_run.log({"train_loss": avg_loss}) 
+            self.wandb_run.log({
+                "train_loss": avg_loss,
+                "train_accuracy": train_accuracy
+            }) 
             self.logger.add_scalar(tag='Loss/train', scalar_value=avg_loss, global_step=epoch)
+            self.logger.add_scalar(tag='Accuracy/train', scalar_value=train_accuracy, global_step=epoch)
 
             # Evaluate after each epoch
             self.evaluate(epoch)
@@ -134,25 +158,49 @@ class Trainer:
         """Evaluate the model and log metrics."""
         self.model.eval()
         running_loss = 0.0
+        correct = 0
+        total = 0
         
         with torch.no_grad():
+            # Add tqdm progress bar
+            # val_pbar = tqdm(self.val_loader, desc=f"Epoch {epoch+1}/{self.epochs} [Val]")
             for batch_idx, (inputs, targets) in enumerate(self.val_loader):
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
                 running_loss += loss.item()
+                
+                # Calculate accuracy
+                _, predicted = outputs.max(1)
+                total += targets.size(0)
+                correct += predicted.eq(targets).sum().item()
+                
+                # Update progress bar
+                # val_pbar.set_postfix({
+                #     'loss': f'{loss.item():.4f}',
+                #     'acc': f'{100.0 * correct / total:.2f}%'
+                # })
 
         avg_loss = running_loss / len(self.val_loader)
-        print(f"Epoch [{epoch+1}/{self.epochs}], Val Loss: {avg_loss:.4f}")   
+        val_accuracy = 100.0 * correct / total
+        print(f"Epoch [{epoch+1}/{self.epochs}], Val Loss: {avg_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%")   
         if epoch == self.epochs - 1:
             self.final_val_loss = avg_loss
+            self.final_val_accuracy = val_accuracy
             # Log hyperparameters to TensorBoard
             hparams = {**self.train_config, **self.model_config}
-            self.logger.add_hparams(hparams, metric_dict={'final_val_loss': self.final_val_loss})
+            self.logger.add_hparams(hparams, metric_dict={
+                'final_val_loss': self.final_val_loss,
+                'final_val_accuracy': self.final_val_accuracy
+            })
         
         # Log metrics
-        self.wandb_run.log({"val_loss": avg_loss}) 
+        self.wandb_run.log({
+            "val_loss": avg_loss,
+            "val_accuracy": val_accuracy
+        }) 
         self.logger.add_scalar(tag='Loss/val', scalar_value=avg_loss, global_step=epoch)
+        self.logger.add_scalar(tag='Accuracy/val', scalar_value=val_accuracy, global_step=epoch)
         
         # Visualize feature maps and confusion matrix
         feature_fig = visualize_model_layers(self.model, self.val_loader)
@@ -174,7 +222,14 @@ class Trainer:
 
 def main():
     # Create trainer instance with configs
-    trainer = Trainer(train_config, config_TinyVGG)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debug_mode", type=bool, default=False)
+    args = parser.parse_args()
+    if args.debug_mode:
+        trainer = Trainer(train_config, config_TinyVGG, subset_size=100)
+    else:
+        trainer = Trainer(train_config, config_TinyVGG)
     
     # Run training
     trainer.train()

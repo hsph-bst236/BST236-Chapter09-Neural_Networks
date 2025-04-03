@@ -1,4 +1,4 @@
-##% Load CIFAR10 dataset
+#%% Load CIFAR10 dataset
 import torchvision
 from torchvision import datasets
 from torchvision import transforms
@@ -44,22 +44,23 @@ def apply_transform(img, aug, num_times=6):
     plt.show()
 
 ##% Flip
+apply_transform(image, torchvision.transforms.RandomHorizontalFlip())
 apply_transform(image, torchvision.transforms.RandomRotation(degrees=15))
 
 #%% Color Jitter
 apply_transform(image, torchvision.transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5))
 
 #%% Crop
-apply_transform(image, torchvision.transforms.RandomResizedCrop(32, padding=4))
-
+apply_transform(image, torchvision.transforms.RandomResizedCrop(size=(32, 32), scale=(0.5, 1.5), ratio=(0.5, 1.5)))
 #%% Compose
 from torchvision import transforms
-transform = transforms.Compose([
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomResizedCrop(size=(32, 32), scale=(0.5, 1.5), ratio=(0.5, 1.5)),
-    transforms.ToTensor()
+transform = torchvision.transforms.Compose([
+    torchvision.transforms.RandomHorizontalFlip(),
+    torchvision.transforms.RandomRotation(degrees=15),
+    torchvision.transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5),
+    torchvision.transforms.RandomResizedCrop(size=(32, 32), scale=(0.5, 1.5), ratio=(0.5, 1.5))
 ])
-trainset_aug = datasets.CIFAR10(root='./data', train=True,
+apply_transform(image, transform)trainset_aug = datasets.CIFAR10(root='./data', train=True,
                           download=True, transform=transform)
 trainloader = DataLoader(trainset_aug, batch_size=128, shuffle=True)
 
