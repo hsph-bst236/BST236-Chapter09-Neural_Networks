@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=tinyVGG_train
-#SBATCH --output=tinyVGG-%j.out
-#SBATCH --error=tinyVGG-%j.err
+#SBATCH --job-name=tinyVGG_dataparallel
+#SBATCH --output=tinyVGG_dp-%j.out
+#SBATCH --error=tinyVGG_dp-%j.err
 #SBATCH --time=24:00:00
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=30G
+#SBATCH --gres=gpu:4
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
 
 # Print node information
 echo "Job running on $(hostname)"
@@ -21,8 +21,11 @@ nvidia-smi
 # Change to the directory containing the script
 cd $SLURM_SUBMIT_DIR
 
-# Run the training script
-python src/train.py
+# Set environment variables for better GPU performance
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+
+# Run the training script with DataParallel
+python src/train_dataparallel.py --save-freq 5
 
 # Print completion message
 echo "Training completed at $(date)" 

@@ -8,3 +8,4 @@ wandb
 scikit-learn
 seaborn
 Pillow
+urllib3
