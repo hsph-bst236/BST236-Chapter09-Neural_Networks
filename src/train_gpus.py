@@ -49,7 +49,7 @@ class DistributedTrainer:
         
         # Initialize timestamp and run name
         self.timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_name = f"{train_config['run_name']}_{self.timestamp}"
+        self.run_name = f"{train_config['run_name']}_GPUs_{self.timestamp}"
         
         # Set device and extract hyperparameters
         self.device = torch.device(f"cuda:{rank}")
